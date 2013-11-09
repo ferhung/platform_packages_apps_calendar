@@ -54,6 +54,7 @@ import android.widget.PopupWindow;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Calendar;
 
 public class MonthView extends View implements View.OnCreateContextMenuListener {
@@ -77,6 +78,16 @@ public class MonthView extends View implements View.OnCreateContextMenuListener 
     private static int BUSY_BITS_WIDTH = 6;
     private static int BUSY_BITS_MARGIN = 4;
     private static int DAY_NUMBER_OFFSET = 10;
+    private static int BUSYBIT_TOP_BOTTOM_MARGIN = 6;
+    private static int BUSYBIT_WIDTH = 10;
+    private static int LUNAR_TEXT_PADDING_X = 5;
+    private static int LUNAR_TEXT_PADDING_Y_PORT = -11;
+    private static int LUNAR_TEXT_PADDING_Y2_PORT = -15;
+    private static int MOUTH_DAY_TEXT_PADDING_Y_LAND = 10;
+    private static int MOUTH_DAY_TEXT_PADDING_Y_PORT = -15;
+
+    private static int BUSYBIT_RIGHT_MARGIN = 2;
+    private static int DAY_LUNAR_SIZE = 15;
 
     private static int HORIZONTAL_FLING_THRESHOLD = 50;
 
@@ -98,7 +109,7 @@ public class MonthView extends View implements View.OnCreateContextMenuListener 
     // This Time object is used for temporary calculations and is allocated
     // once to avoid extra garbage collection
     private Time mTempTime;
-
+    Time mTimer = new Time();
     private DayOfMonthCursor mCursor;
 
     private int mCellWidth;
@@ -199,6 +210,7 @@ public class MonthView extends View implements View.OnCreateContextMenuListener 
             mOtherViewCalendar.normalize(true);
         }
     };
+    private LunarCalendar lunarCalendar = new LunarCalendar(mContext);
 
     public MonthView(MonthActivity activity, Navigator navigator) {
         super(activity);
@@ -894,28 +906,149 @@ public class MonthView extends View implements View.OnCreateContextMenuListener 
         p.setTypeface(null);
         p.setTextSize(MONTH_DAY_TEXT_SIZE);
 
-        if (!withinCurrentMonth) {
-            p.setColor(mMonthOtherMonthDayNumberColor);
-        } else {
-            if (isToday && !drawSelection) {
-                p.setColor(mMonthTodayNumberColor);
-            } else if (Utils.isSunday(column, mStartDay)) {
-                p.setColor(mMonthSundayColor);
-            } else if (Utils.isSaturday(column, mStartDay)) {
-                p.setColor(mMonthSaturdayColor);
-            } else {
-                p.setColor(mMonthDayNumberColor);
-            }
-            //bolds the day if there's an event that day
-            p.setFakeBoldText(eventDay[day-mFirstJulianDay]);
+        if (lunarCalendar.isLunarSetting()) {
+            drawLunarText(day, weekNum, row, column, canvas, p, r, isLandscape);
         }
-        /*Drawing of day number is done here
-         *easy to find tags draw number draw day*/
-        p.setTextAlign(Paint.Align.CENTER);
-        // center of text
-        int textX = r.left + (r.right - BUSY_BITS_MARGIN - BUSY_BITS_WIDTH - r.left) / 2;
-        int textY = (int) (r.top + p.getTextSize() + TEXT_TOP_MARGIN); // bottom of text
-        canvas.drawText(String.valueOf(mCursor.getDayAt(row, column)), textX, textY, p);
+        drawMonthDayText(day, weekNum, row, column, canvas, p, r, isLandscape);
+    }
+
+    private int getMiddleStrTextX(Rect r, String drawTextStr, Paint drawPaint) {
+        int absMiddle = r.left + (r.right - r.left) / 2;
+        float drawTextStrWidth = drawPaint.measureText(drawTextStr);
+        return (int) (absMiddle - drawTextStrWidth / 2) - LUNAR_TEXT_PADDING_X;
+    }
+
+    private float getOffset_Y(Rect r, Paint p) {
+        int absMiddle_Y = r.top + (r.bottom - r.top) / 2;
+        float offset_Y = (float) absMiddle_Y + p.getTextSize() / 2;
+        return offset_Y;
+    }
+
+ 
+    private void drawLunarText(int day, int weekNum, int row, int column, Canvas canvas, Paint p,
+            Rect r, boolean isLandscape) {
+        boolean drawSelection = false;
+        if (mSelectionMode != SELECTION_HIDDEN) {
+            drawSelection = mCursor.isSelected(row, column);
+        }
+
+        boolean withinCurrentMonth = mCursor.isWithinCurrentMonth(row, column);
+        boolean isToday = false;
+        int dayOfBox = mCursor.getDayAt(row, column);
+        if (dayOfBox == mToday.monthDay && mCursor.getYear() == mToday.year
+                && mCursor.getMonth() == mToday.month) {
+            isToday = true;
+        }
+
+        // Draw the monthDay number
+        p.setStyle(Paint.Style.FILL);
+        p.setAntiAlias(true);
+        p.setTypeface(null);
+        int right = r.right - BUSYBIT_WIDTH - BUSYBIT_RIGHT_MARGIN;
+        int textX = r.left + (right - r.left) / 3 + 2; // center of text
+        int textY = r.bottom - BUSYBIT_TOP_BOTTOM_MARGIN; // bottom of text
+        if(!isLandscape){
+        	textY += LUNAR_TEXT_PADDING_Y_PORT;
+        }
+        if (!withinCurrentMonth) {
+             p.setColor(mMonthOtherMonthDayNumberColor);
+        } else if (drawSelection || !isToday) {
+        	p.setColor(mMonthDayNumberColor);
+            p.setTextSize(DAY_LUNAR_SIZE);
+            mTimer.monthDay = mCursor.getDayAt(row, column);
+            mTimer.month = mViewCalendar.month;
+            mTimer.year = mViewCalendar.year;
+            List<String> lunarStr = getMultiLunarDay(mTimer);
+            String lunarText = "";
+            if(lunarStr.size() == 1){
+                lunarText = lunarStr.get(0);
+            }else if(lunarStr.size() > 1){
+                if(!isLandscape){
+                    lunarText = lunarStr.get(0);
+                    int textX2 = getMiddleStrTextX(r, lunarStr.get(1), p);
+                    int textY2 = textY + LUNAR_TEXT_PADDING_Y2_PORT;
+                    canvas.drawText(lunarStr.get(1), textX2, textY2, p);
+            }else{
+                    lunarText = lunarStr.get(0) + "  " + lunarStr.get(1);
+                 }
+            }
+            textX = getMiddleStrTextX(r, lunarText, p);
+            canvas.drawText(lunarText, textX, textY, p);
+
+        } else {
+            p.setColor(mMonthTodayNumberColor);
+            p.setTextSize(DAY_LUNAR_SIZE);
+            List<String> lunarStr = getMultiLunarDay(mToday);
+            String lunarText = "";
+            if(lunarStr.size() == 1){
+                lunarText = lunarStr.get(0);
+            }else if(lunarStr.size() > 1){
+                if(!isLandscape){
+                    lunarText = lunarStr.get(0);
+                    int textX2 = getMiddleStrTextX(r, lunarStr.get(1), p);
+                    int textY2 = textY + LUNAR_TEXT_PADDING_Y2_PORT;
+                    canvas.drawText(lunarStr.get(1), textX2, textY2, p);
+                }else{
+                    lunarText = lunarStr.get(0) + "  " + lunarStr.get(1);
+                }
+            }
+            textX = getMiddleStrTextX(r, lunarText, p);
+            canvas.drawText(lunarText, textX, textY, p);
+        }
+    }
+    private void drawMonthDayText(int day, int weekNum, int row, int column, Canvas canvas,
+            Paint p, Rect r, boolean isLandscape) {
+        boolean drawSelection = false;
+        if (mSelectionMode != SELECTION_HIDDEN) {
+            drawSelection = mCursor.isSelected(row, column);
+        }
+
+        boolean withinCurrentMonth = mCursor.isWithinCurrentMonth(row, column);
+        boolean isToday = false;
+        int dayOfBox = mCursor.getDayAt(row, column);
+        if (dayOfBox == mToday.monthDay && mCursor.getYear() == mToday.year
+                && mCursor.getMonth() == mToday.month) {
+            isToday = true;
+        }
+
+        // Draw the monthDay number
+        p.setStyle(Paint.Style.FILL);
+        p.setAntiAlias(true);
+        p.setTypeface(null);
+        int right = r.right - BUSYBIT_WIDTH - BUSYBIT_RIGHT_MARGIN;
+        int textX = r.left + (right - r.left) / 3 + 2; // center of text
+        int textY = r.bottom - BUSYBIT_TOP_BOTTOM_MARGIN - MONTH_DAY_TEXT_SIZE; // bottom of text
+        if(isLandscape){
+        	textY += MOUTH_DAY_TEXT_PADDING_Y_LAND;
+        }else{
+        	textY += MOUTH_DAY_TEXT_PADDING_Y_PORT;
+        }
+        if (!lunarCalendar.isLunarSetting()) {
+            textX = r.left + (right - r.left) / 3 + 2;
+            textY = (int) getOffset_Y(r, p);
+        }
+
+        if (!withinCurrentMonth) {
+            if (drawSelection) {
+                p.setColor(mMonthTodayNumberColor);
+            } else {
+                p.setColor(mMonthOtherMonthDayNumberColor);
+            }
+            p.setTextSize(MONTH_DAY_TEXT_SIZE);
+            int other_textY = (int) getOffset_Y(r, p);
+                String monthStr = String.valueOf(mCursor.getDayAt(row, column));
+
+                textX = getMiddleStrTextX(r, monthStr, p);
+                canvas.drawText(monthStr, textX, other_textY, p);
+        
+        } else {
+        	p.setColor(mMonthDayNumberColor);
+            p.setTextSize(MONTH_DAY_TEXT_SIZE);
+            String monthStr = String.valueOf(mCursor.getDayAt(row, column));
+
+            textX = getMiddleStrTextX(r, monthStr, p);
+            canvas.drawText(monthStr, textX, textY, p);
+        }
     }
 
     ///Create and draw the event busybits for this day
@@ -1037,6 +1170,58 @@ public class MonthView extends View implements View.OnCreateContextMenuListener 
         invalidate();
     }
 
+    public String getLunarDay(Time time) {
+        LunarCalendarConvertUtil.parseLunarCalendar(time.year, time.month, time.monthDay,
+                lunarCalendar);
+        String[] s = lunarCalendar.getLunarCalendarInfo();
+        if (s == null)
+            return "";
+        String ss = getResources().getString(R.string.chineseTen0)
+                + getResources().getString(R.string.chineseNumber1);
+        if (s[3] != null && !s[3].trim().equals(""))
+            return s[3];
+        if (s[4] != null && !s[4].trim().equals(""))
+            return s[4];
+        if(s[5]!= null && !s[5].trim().equals(""))
+            return s[5];
+        if (s[2].equals(ss)) {
+            return s[1];
+        } else {
+            return s[2];
+        }
+    }
+    
+    public List<String> getMultiLunarDay(Time time) {
+        LunarCalendarConvertUtil.parseLunarCalendar(time.year, time.month, time.monthDay,
+                lunarCalendar);
+        String[] s = lunarCalendar.getLunarCalendarInfo();
+        List<String> lunarStr = new ArrayList<String>();
+        if (s == null)
+            return lunarStr;
+        String ss = getResources().getString(R.string.chineseTen0)
+                + getResources().getString(R.string.chineseNumber1);
+        boolean hasDayStr = false;
+        if (s[4] != null && !s[4].trim().equals("")){
+            lunarStr.add(s[4]);
+            hasDayStr = true;
+        }
+        if (s[3] != null && !s[3].trim().equals("")){
+            lunarStr.add(s[3]);
+            hasDayStr = true;
+        }
+        if(s[5]!= null && !s[5].trim().equals("")){
+            lunarStr.add(s[5]);
+            hasDayStr = true;
+        }
+        if(!hasDayStr){
+	        if (s[2].equals(ss)) {
+	            lunarStr.add(s[1]);
+	        } else {
+	            lunarStr.add(s[2]);
+	        }
+        }
+        return lunarStr;
+    }
     public long getSelectedTimeInMillis() {
         Time time = mTempTime;
         time.set(mViewCalendar);

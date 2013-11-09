@@ -843,7 +843,7 @@ public class AgendaWindowAdapter extends BaseAdapter {
                 } else if (BASICLOG && data.start < mAdapterInfos.getLast().end) {
                     mAdapterInfos.addLast(info);
                     for (DayAdapterInfo info2 : mAdapterInfos) {
-                        Log.e("========== BUG ==", info2.toString());
+                        Log.e(TAG, info2.toString());
                     }
                 } else {
                     mAdapterInfos.addLast(info);
